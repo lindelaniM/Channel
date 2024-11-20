@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Broadcasting Channel</title>
+  <style>
+    /* Theme variables */
+    :root {
+      --background-color: #ffffff;
+      --text-color: #000000;
+      --card-color: #f9f9f9;
+      --button-bg: #007bff;
+      --button-text: #ffffff;
+    }
+    [data-theme="dark"] {
+      --background-color: #121212;
+      --text-color: #ffffff;
+      --card-color: #1e1e1e;
+      --button-bg: #1a73e8;
+      --button-text: #ffffff;
+    }
+    /* General styles */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--background-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .card {
+      border-radius: 8px;
+      width: 100%;
+      max-width: 600px;
+      padding: 16px;
+      background-color: var(--card-color);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      margin: 20px;
+      transition: background-color 0.3s;
+    }
+    .card-header {
+      font-size: 1.5em;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .button {
+      padding: 8px 16px;
+      border: none;
+      background-color: var(--button-bg);
+      color: var(--button-text);
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 8px 4px;
+      font-size: 1em;
+    }
+    .button.outline {
+      background-color: transparent;
+      color: var(--button-bg);
+      border: 1px solid var(--button-bg);
+    }
+    .button:disabled {
+      background-color: #ddd;
+      color: #888;
+      cursor: not-allowed;
+    }
+    .participants-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .participant {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background-color: var(--card-color);
+      text-align: center;
+    }
+    .participant img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      margin-bottom: 8px;
+    }
+    .participant .hand-raised {
+      color: var(--button-bg);
+      font-weight: bold;
+    }
+    .theme-toggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1000;
+    }
+    .status {
+      margin-top: 16px;
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <!-- Theme Toggle Button -->
+  <button class="button theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+
+  <!-- Broadcasting Channel Card -->
+  <div class="card">
+    <div class="card-header">Broadcasting Channel</div>
+    <div>
+      <button id="join-leave-btn" class="button" onclick="toggleChannel()">Join Channel</button>
+      <button id="mute-btn" class="button outline" onclick="toggleMute()" disabled>Mute</button>
+      <button id="hand-btn" class="button outline" onclick="raiseHand()" disabled>Raise Hand</button>
+    </div>
+    <div id="status" class="status">Microphone Status: <span id="mic-status">Not Joined</span></div>
+    <div class="participants-grid" id="participants">
+      <!-- Participants will appear here -->
+    </div>
+  </div>
+
+  <script>
+    let isJoined = false;
+    let isMuted = true;
+    let mediaStream = null;
+    let userName = null;
+    let participants = [];
+    let currentTheme = "light";
+
+    // Join/Leave Channel
+    async function toggleChannel() {
+      const joinLeaveButton = document.getElementById("join-leave-btn");
+      const muteButton = document.getElementById("mute-btn");
+      const handButton = document.getElementById("hand-btn");
+      const micStatus = document.getElementById("mic-status");
+
+      if (isJoined) {
+        // Leave Channel
+        isJoined = false;
+        isMuted = true;
+        muteButton.disabled = true;
+        handButton.disabled = true;
+        joinLeaveButton.textContent = "Join Channel";
+        micStatus.textContent = "Not Joined";
+        participants = participants.filter(p => p.name !== userName); // Remove user
+        userName = null;
+        updateParticipants();
+        stopMicrophone();
+      } else {
+        // Join Channel
+        userName = prompt("Enter your name:");
+        if (!userName) return; // Don't join without a name
+
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          isJoined = true;
+          isMuted = false;
+          muteButton.disabled = false;
+          handButton.disabled = false;
+          joinLeaveButton.textContent = "Leave Channel";
+          micStatus.textContent = "Unmuted";
+
+          participants.push({ name: userName, isMuted: false, handRaised: false });
+          updateParticipants();
+        } catch (error) {
+          console.error("Error accessing microphone:", error);
+          micStatus.textContent = "Microphone Access Denied";
+        }
+      }
+    }
+
+    // Mute/Unmute Microphone
+    function toggleMute() {
+      const muteButton = document.getElementById("mute-btn");
+      const micStatus = document.getElementById("mic-status");
+
+      if (!mediaStream) return;
+
+      const audioTracks = mediaStream.getAudioTracks();
+      if (isMuted) {
+        audioTracks.forEach(track => (track.enabled = true));
+        isMuted = false;
+        muteButton.textContent = "Mute";
+        micStatus.textContent = "Unmuted";
+        updateParticipantStatus(userName, false);
+      } else {
+        audioTracks.forEach(track => (track.enabled = false));
+        isMuted = true;
+        muteButton.textContent = "Unmute";
+        micStatus.textContent = "Muted";
+        updateParticipantStatus(userName, true);
+      }
+    }
+
+    // Raise Hand
+    function raiseHand() {
+      const handButton = document.getElementById("hand-btn");
+      updateParticipantHand(userName, true);
+      handButton.disabled = true; // Prevent multiple hand raises
+    }
+
+    // Stop microphone when leaving the channel
+    function stopMicrophone() {
+      if (mediaStream) {
+        const audioTracks = mediaStream.getAudioTracks();
+        audioTracks.forEach(track => track.stop());
+        mediaStream = null;
+      }
+    }
+
+    // Update participant list
+    function updateParticipants() {
+      const participantList = document.getElementById("participants");
+      participantList.innerHTML = "";
+
+      participants.forEach(participant => {
+        const participantDiv = document.createElement("div");
+        participantDiv.className = "participant";
+
+        participantDiv.innerHTML = `
+          <img src="image.jpg" alt="User Icon">
+          <span>${participant.name}</span>
+          <span>${participant.isMuted ? "Muted" : "Unmuted"}</span>
+          ${participant.handRaised ? "<span class='hand-raised'>Hand Raised</span>" : ""}
+        `;
+
+        participantList.appendChild(participantDiv);
+      });
+    }
+
+    // Update mute status of a participant
+    function updateParticipantStatus(name, isMuted) {
+      participants = participants.map(p => p.name === name ? { ...p, isMuted } : p);
+      updateParticipants();
+    }
+
+    // Update hand raise status of a participant
+    function updateParticipantHand(name, handRaised) {
+      participants = participants.map(p => p.name === name ? { ...p, handRaised } : p);
+      updateParticipants();
+    }
+
+    // Theme Toggle
+    function toggleTheme() {
+      currentTheme = currentTheme === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", currentTheme);
+    }
+  </script>
+</body>
+</html>
